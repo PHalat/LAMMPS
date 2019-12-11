@@ -1,0 +1,170 @@
+#!/usr/bin/env python 
+import sys
+import argparse
+
+def pair_coeffs(fr,to):
+    '''
+    This function transfers the pair_coeffs line
+    from one input to another
+    '''
+    found = False
+    for i in range(len(to)):
+        if 'pair_coeff' in to[i]:
+            start = i
+            found = True
+            break
+
+    for i in range(len(fr)):
+        if 'pair_coeff' in fr[i]:
+            anchor = i
+            while len(fr[anchor + 1].split()) > 0:
+                anchor = anchor + 1
+            pcs = fr[i:anchor + 1]
+            break
+
+    if found:
+        end = i
+        while len(to[end + 1].split()) > 0:
+            end = end + 1
+        to[start:end + 1] = pcs
+    else:
+        print("I couldn't find an existing 'pair_coeff' section, making a reasonable guess")
+        for i in range(len(to)):
+            if 'read_restart' in to[i] or 'read_data' in to[i]:
+                anchor = i
+                while len(fr[anchor + 1].split()) > 0:
+                    anchor = anchor + 1
+                to[anchor + 1:anchor + 1] = [' \n'] + pcs + [' \n'] 
+                break 
+                      
+
+def shake(fr,to):
+    '''
+    This function transfers the bonds specified as rigid
+    from one input to another
+    '''
+    found = False
+    for i in range(len(to)):
+        if 'fix' in to[i] and 'shake' in to[i]:          
+            found = True
+            rep = i
+            break
+
+    if found:
+        for i in range(len(fr)):
+            if 'fix' in fr[i] and 'shake' in fr[i]:
+                labels = fr[i].split()[3:]
+                tospl = to[rep].split()
+                tospl[3:] = labels
+                to[rep] = ' '.join(tospl) + ' \n'
+                break
+
+    else:
+        print("I couldn't find an existing 'fix shake' line, making a reasonable guess")
+        for i in range(len(to)):
+            if 'pair_coeff' in to[i]:
+                anchor = i
+                while len(to[anchor + 1].split()) > 0:
+                    anchor = anchor + 1
+                break
+        for i in range(len(fr)):
+            if 'fix' in fr[i] and 'shake' in fr[i]:
+                to[anchor + 1:anchor + 1] = [' \n',fr[i],' \n'] 
+                break 
+                 
+        
+def dump_modify(fr,to):
+    '''
+    This function transfers the dump_modify element labels from one 
+    input to another
+    '''
+    found = False 
+    for i in range(len(to)):
+        if 'dump_modify' in to[i] and 'element' in to[i]: 
+            found = True
+            rep = i
+            break
+    
+    if found:
+        for i in range(len(fr)):
+            if 'dump_modify' in fr[i] and 'element' in fr[i]:
+                labels = fr[i].split()[3:]
+                tospl = to[rep].split()
+                tospl[3:] = labels
+                to[rep] = ' '.join(tospl) + ' \n'
+                break
+    else:
+        print("Uh oh, I couldn't find a suitable 'dump_modify' line in your output")
+        print("I will skip transferring this, as I can't guess where to put it")
+
+def pair_style_fix(to):
+    '''
+    This function checks if the pair_style line contains 'hybrid'
+    and adds it if necessary.
+    '''
+    good = False
+    for i in range(len(to)):
+        if 'pair_style' in to[i]:
+            if to[i].split()[1] == 'hybrid':
+                print('looks good')
+                good = True
+            break
+     
+    if not(good):
+        for i in range(len(to)):
+            if 'pair_style' in to[i]:
+                spl = to[i].split()
+                spl[:1] = ['pair_style','hybrid']
+                to[i] = ' '.join(spl) + ' \n'
+                print("keyword 'hybrid' added")   
+
+def main(): 
+    parser = argparse.ArgumentParser(
+        description = 'Just a code to transfer pair coeffs, dump atom labels'\
+        'and any rigid bonds (called with -s) to an input file of your choice.'\
+        'Your first argument should be the input file from which the information will'\
+        'be transferred to your second argument')
+    parser.add_argument('-s', '--shake', action = 'store_true',
+                        help = 'Flag this to transfer rigid bonds')
+    parser.add_argument('-d', '--dump', action = 'store_true',
+                        help = 'Flag this to transfer dump_modify labels')
+    parser.add_argument('-p', '--coeffs', action = 'store_true',
+                        help = 'Flag this to transfer pair_coeffs')
+    parser.add_argument('files', nargs='+',
+                        help = 'fromfile tofile') 
+    args = parser.parse_args()
+    
+    fromfile = args.files[0]
+    
+    with open(fromfile, 'r') as f:
+        fromlines = f.readlines()
+        f.close()
+
+    tofile = args.files[1]
+
+    with open(tofile, 'r') as f:
+        tolines = f.readlines()
+        f.close()
+    
+    if args.coeffs:
+        print('Transferring pair coefficients')
+        pair_coeffs(fromlines,tolines)
+
+    if args.shake:
+        print('Transferring shake line')
+        shake(fromlines,tolines)
+    
+    if args.dump:
+        print('Transferring dump modify line')
+        dump_modify(fromlines,tolines)
+
+    print('Checking pair_style line...')
+    pair_style_fix(tolines)    
+
+    with open(tofile, 'w') as dish:
+        for i in tolines:
+             dish.write(i)
+        dish.close()
+
+if __name__ == '__main__':
+    main()

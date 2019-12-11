@@ -1,0 +1,52 @@
+#!/usr/bin/env python
+import sys
+import argparse
+
+
+def add_drude(text):
+    '''
+    This function reads in the polarisability of an atom,
+    calculates the charge of the drude particle and adds 
+    bond information, the mass of the drude particle and thole damping.
+    These numbers match the Goloviznina/Padua method from their 2019 paper.
+    '''
+    for i in range(len(text)):
+        if len(text[i].split()) > 0 and text[i][0] != '#':
+            spl = text[i].split()
+            charge = '%.5f' % ( -1 * abs((( 3.0128 * float(spl[1])) ** 0.5)))
+            spl[1:1] = ['0.4',charge,'4184.0']
+            spl.append('2.6')
+            text[i] = ' '.join(spl) + ' \n' 
+
+def main():
+    parser = argparse.ArgumentParser(
+        description = 'Just a code to help construct drude.dff files for polarizer.py. '\
+        'Your input (first argument) should consist of atom labels and polarisabilities in A^3. '\
+        'Lines starting with a # will be ignored. '\
+        'The output is the input by default, but you may specify a second argument.')
+    parser.add_argument('files', nargs='+',
+                        help = 'input [output]')
+    args = parser.parse_args()
+                   
+    fromfile = args.files[0]
+
+    with open(fromfile, 'r') as f:
+        fromlines = f.readlines()
+        f.close() 
+
+    add_drude(fromlines)
+    
+    if len(args.files) > 1:
+        with open(args.files[1], 'w') as dish:
+            for i in fromlines:     
+                dish.write(i)
+            dish.close()
+    else:
+        with open(fromfile, 'w') as dish:
+            for i in fromlines:     
+                dish.write(i)
+            dish.close()
+
+
+if __name__ == '__main__':
+    main()

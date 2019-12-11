@@ -1,0 +1,244 @@
+#!/usr/bin/env python
+import sys
+import argparse
+
+def mixing(fr,pr,ru):
+    '''
+    This function takes the pair coefficients from the input file,
+    adds them to the seperate pair interactions file.
+    Furthermore, since mixing isn't supported by the hybrid pair style,
+    this function performs explicit mixing.
+    '''
+    coefflines = []
+    coefflines.append('# Added pair interactions from input_polariser script\n')
+    for i in range(len(fr)):
+        if 'pair_coeff' in fr[i]:
+            anchor = i
+            while 'pair_coeff' in fr[anchor+1]:
+                anchor = anchor + 1
+            for j in range(len(fr[i:anchor+1])):
+                coefflines.append(fr[i+j])
+                spl1 = fr[i+j].split()
+                for k in range(j+1,len(fr[i:anchor+1])):
+                    spl2 = fr[i+k].split()
+                    spl2[1] = spl1[1]
+                    spl2[7] = spl1[7]
+                    spl2[4] = '%.5f' % (float(spl1[4]) * float(spl2[4])) ** 0.5 
+                    if ru == 'a':
+                        spl2[5] = '%.5f' % (float(spl1[5]) + float(spl2[5])) * 0.5
+                    else: 
+                        spl2[5] = '%.5f' % (float(spl1[5]) * float(spl2[5])) ** 0.5
+                    coefflines.append(' '.join(spl2) + ' \n')
+            pr[0:0] = coefflines
+            fr[i:anchor + 1] = []
+            break
+
+def include(fr):
+    '''
+    This function adapts the read_data line to support more neighbours
+    for each atom, being drude particles. 
+    It also adds a line to include the pair interactions file.
+    '''
+    global datafile
+    global pairfile
+    for i in range(len(fr)):
+        if 'read_data' in fr[i]:
+            fr[i] = 'read_data ' + datafile + ' extra/special/per/atom 3 \n'
+            fr[i+1:i+1] = ['include ' + pairfile + ' \n'] 
+            break
+
+def thermo(fr):
+    '''
+    This function adds the relevant thermochemistry lines for drude
+    oscillators into the input file. It also adapts any thermo_style line to include
+    separate temperatures for drude particles and atoms. 
+    Any lines giving a velocity to all atoms is removed.
+    '''
+    for i in range(len(fr)):
+        if 'thermo_style' in fr[i]:
+            spl = fr[i].split()
+            for j in range(len(spl)):
+                if spl[j] == 'temp':
+                    spl[j+1:j+1] = ['c_TDRUDE[1]','c_TDRUDE[2]']
+                    break    
+            fr[i] = ' '.join(spl) + ' \n'
+            fr[i:i] = ['comm_modify vel yes \n','\n','compute TDRUDE all temp/drude \n','\n']
+            fr[i:i] = ['velocity        DRUDES create 1 1 dist gaussian\n','\n']
+            fr[i:i] = ['velocity        ATOMS create 300 300 dist gaussian\n']
+            break
+
+    for i in range(len(fr)):
+        if 'velocity' in fr[i] and 'all' in fr[i]:
+            print("'velocity all' line detected, removing")
+            fr[i:i+1] = []
+            break
+
+def pair_style(fr):
+    '''
+    This function adapts the pair style line to support
+    the multiple types of interaction for drude oscillator simulations.
+    '''
+    for i in range(len(fr)):
+        if 'pair_style' in fr[i]:
+            spl = fr[i].split()
+            for j in range(len(spl)):
+                if spl[j] == 'hybrid':
+                    spl[j] = 'hybrid/overlay'
+                    break
+            spl = spl + ['coul/long/cs','12.0','thole','2.6','12.0']
+            fr[i] = ' '.join(spl) + '\n'
+
+def fix_shake(fr):
+    '''
+    This function looks for a fix shake line and changes the
+    operated group to ATOMS, as is required.
+    '''
+    found = False
+    for i in range(len(fr)):
+        if 'shake' in fr[i]:
+            found = True
+            anchor = i
+            break
+
+    if found:
+        print('Fix shake line detected, changing group to ATOMS')
+        splut = fr[anchor].split()
+        splut[2] = 'ATOMS'
+        fr[anchor] = (' '.join(splut) + '\n')
+        
+def dump_modify(fr):
+    '''
+    This function looks for any dump_modify label lines and adds
+    drude particle labels, if necessary.
+    '''
+    global maxatom
+    found = False
+    for i in range(len(fr)):
+        if 'dump_modify' in fr[i] and 'element' in fr[i]:
+            found = True
+            anchor = i
+            break
+
+    if found:
+        print('dump_modify line detected, adding drude labels if necessary')
+        splut = fr[anchor].split()
+        while len(splut) < maxatom + 3:
+            splut.append('D')
+        fr[anchor] = (' '.join(splut) + '\n')
+
+def grouping(da,fr):
+    '''
+    This function figures which atoms are drude particles, drude cores,
+    or non-polarisable, then adds these labels into the input file.
+    Then, it all adds a fix drude line stating the drude 'role' of each particle. 
+    '''
+    global maxatom
+    atoms, cores, drudes = ['group','ATOMS','type'],['group','CORES','type'],['group','DRUDES','type']
+    grouplines = ['\n']
+    fixdrude = ['fix','DRUDE','all','drude']
+    for i in range(len(da)):
+        if 'Masses' in da[i]:
+            anchor = i + 1
+            while len(da[anchor + 1].split()) > 0 and da[anchor + 1][0] != '#':
+                anchor = anchor + 1
+                spl = da[anchor].split()
+                if spl[-1] == 'DP':
+                    drudes.append(spl[0])
+                elif spl[-1] == 'DC':
+                    cores.append(spl[0])
+                    atoms.append(spl[0])
+                else:
+                    atoms.append(spl[0])
+            maxatom = int(spl[0]) 
+            break
+    for i in range(len(fr)):
+        if 'include ' in fr[i]:
+            print('yes')
+            for j in [atoms,cores,drudes]:
+                grouplines.append(' '.join(j) + '\n')
+            for j in range(1,maxatom + 1):
+                if str(j) in drudes:
+                    fixdrude.append('D')
+                elif str(j) in cores:
+                    fixdrude.append('C')
+                elif str(j) in atoms:
+                    fixdrude.append('N')
+            grouplines.append('\n')
+            grouplines.append(' '.join(fixdrude) + '\n')
+            grouplines.append('\n')
+            fr[i+1:i+1] = grouplines
+            break
+            
+pairfile = 'something'
+datafile = 'something'
+maxatom = 0
+
+def main():
+    parser = argparse.ArgumentParser(
+        description = 'Just a code to convert non-polarised inputs to incorporate drude oscillators. '\
+        'In particular, pair_style and read_data sections are edited, and additional group and '\
+        'fix terms are added to incorporate drude oscillators. Furthermore, a compute temp term is added '\
+        'and the thermo_custom is edited to reflect different temperatures. You will need to choose '\
+        'your own thermostat setup. The pair_modify term becomes redundant and is therefore removed if spotted.'\
+        'This code requires an input file, a pairwise data file and a polarised data file. ')
+    parser.add_argument('-p', '--pairs', default='pair-drude.lmp',
+                        help = 'the pair interactions file name, default is pair-drude.lmp')
+    parser.add_argument('-x', '--mix', default='g',
+                        help = 'choose between [g]eometric or [a]rithmetic sigma mixing, default is geometric.')
+    parser.add_argument('-d', '--data', default='pdata.lmp',
+                        help = 'the data file, default is pdata.lmp')
+    parser.add_argument('infiles', nargs='+',
+                        help = 'input [output-input file] ')
+    args = parser.parse_args()
+
+    print('Where do I start?')
+
+    global pairfile
+    pairfile = args.pairs
+   
+    with open(pairfile, 'r') as f:
+        pairlines = f.readlines()
+        f.close()
+
+    global datafile
+    datafile = args.data
+ 
+    with open(datafile, 'r') as f:
+        datalines = f.readlines()
+        f.close()
+    
+    fromfile = args.infiles[0]
+
+    with open(fromfile, 'r') as f:
+        fromlines = f.readlines()
+        f.close()
+
+    rule = args.mix
+    
+    mixing(fromlines,pairlines,rule)
+    include(fromlines)
+    thermo(fromlines)
+    pair_style(fromlines)
+    grouping(datalines,fromlines)
+    fix_shake(fromlines)
+    dump_modify(fromlines) 
+    
+    with open(args.pairs, 'w') as dish:
+        for i in pairlines:
+            dish.write(i)
+        dish.close()
+   
+    if len(args.infiles) > 1:
+        with open(args.infiles[1], 'w') as dish:
+            for i in fromlines:
+                dish.write(i)
+            dish.close()
+    else:
+        with open(fromfile, 'w') as dish:
+            for i in fromlines:
+                dish.write(i)
+            dish.close()
+
+if __name__ == '__main__':
+    main()
+    print('done')

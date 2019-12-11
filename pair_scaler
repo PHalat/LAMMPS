@@ -1,0 +1,143 @@
+#!/usr/bin/env python
+import sys
+import argparse
+
+def backup(inp):
+    '''
+    This function writes a backup file called pair.bak
+    '''
+    with open('pair.bak', 'w') as dish:
+        for i in inp:
+            dish.write(i)
+        dish.close()
+
+def detectmax(inp):
+    '''
+    This function finds the maximum amount of atoms in
+    the pair interactions file
+    '''
+    global maximum
+    for i in range(len(inp)):
+        if '#' in inp[i] and 'Drude particles' in inp[i]:
+            maximum = int(inp[i-1].split()[1]) 
+
+def parse(inp):
+    '''
+    This function parses the arguments in key.scl,
+    constructing lists of relevant atoms
+    '''
+    if ',' in inp and ':' in inp:
+        splut = inp.split(',')
+        toreturn = []
+        for i in splut:
+            if ':' in i:
+                renge = [int(i[0]), int(i[1])]
+                for i in range(min(renge),max(renge) + 1):
+                    toreturn.append(i)
+            else:
+                toreturn.append(int(i))
+        return(toreturn) 
+    elif ',' in inp:
+        splut = inp.split(',')
+        return([int(i) for i in strup])
+    elif ':' in inp:
+        splut = inp.split(':')
+        renge = [int(splut[0]), int(splut[1])]
+        return([i for i in range(min(renge),max(renge) + 1)])
+    elif inp == '*':
+        return([x + 1 for x in range(maximum)])
+    elif inp.isdigit():
+        return([int(inp)])
+    else:
+        print("Error parsing indices in key file, exiting")
+        exit()
+    
+def pair_finder(lists):
+    '''
+    This function constructs a list of pairs to be scaled
+    '''
+    pairlist = []
+    for z in lists[0]:
+        for y in lists[1]:
+            if z <= y and not([z,y] in pairlist):
+                pairlist.append([z,y])
+    for z in lists[1]:
+        for y in lists[0]:
+            if z <= y and not([z,y] in pairlist):
+                pairlist.append([z,y])
+    return(pairlist)
+    
+
+def scale(sty,key,fr):
+    '''
+    This function brings the above functions together,
+    interpreting the key.scl file and scales pair 
+    coefficients accordingly.
+    '''
+    for j in range(len(key)):
+        check = False
+        if key[j].split()[0].lower() == 'e':
+            check = True
+            tochange = 4
+        elif key[j].split()[0].lower() == 's':
+            check = True
+            tochange = 5
+        
+        if check:
+            spl = key[j].split()
+            first, second = spl[1], spl[2]
+            factor = float(spl[3])
+            indices = [parse(first),parse(second)]
+            pairs = pair_finder(indices)
+            for k in range(len(fr)):
+                if sty in fr[k]:
+                    spl2 = fr[k].split()
+                    if [int(spl2[1]),int(spl2[2])] in pairs:
+                        spl2[tochange] = '%.5f' % ( float(spl2[tochange]) * factor )
+                        fr[k] = ' '.join(spl2) + ' \n'
+        elif not(key[j][0] == '#'):
+            print("Invalid formatting on line " + str(j+1) + ", this line will be skipped")
+
+maximum = 0
+
+def main():
+    global maximum
+    parser = argparse.ArgumentParser(
+        description = 'Just a code to scale epsilon and sigma values in a pair listing. '\
+        "Only lines with 'lj/cut/coul/long' will be edited, but this can be changed with -s. "
+        'This script needs a key, flagged by -k to specify scaling factors. Key.scl will be chosen by default. '\
+        'You may also specify a pair file with -p, but pair-drude.lmp will be chosen by default. '\
+        'This script will overwite your pair interactions file, but a backup will be made.')
+    parser.add_argument('-k', '--key', default='key.scl', 
+                        help = 'key with scaling factors (default = key.scl)')
+    parser.add_argument('-p', '--pairs', default='pair-drude.lmp',
+                        help = 'the file containing all pair interactions (default = pair-drude.lmp)')
+    parser.add_argument('-s', '--style', default='lj/cut/coul/long',
+                        help = 'the style of pair_coeff you want to scale (default=lj/cut/coul/long)')
+    args = parser.parse_args()
+   
+    style = args.style
+
+    keyfile = args.key
+
+    with open(keyfile, 'r') as f:
+        keylines = f.readlines()
+        f.close()  
+
+    infile = args.pairs
+
+    with open(infile, 'r') as f:
+        inlines = f.readlines()
+        f.close()
+    
+    backup(inlines)
+    detectmax(inlines)
+    scale(style,keylines,inlines)
+    
+    with open(infile, 'w') as f:
+        for i in inlines:
+            f.write(i)
+        f.close()
+ 
+if __name__ == '__main__':
+    main()

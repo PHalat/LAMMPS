@@ -73,7 +73,7 @@ def thermo(fr):
             fr[i:i+1] = []
             break
 
-def pair_style(fr):
+def pair_style(fr,dip):
     '''
     This function adapts the pair style line to support
     the multiple types of interaction for drude oscillator simulations.
@@ -85,8 +85,14 @@ def pair_style(fr):
                 if spl[j] == 'hybrid':
                     spl[j] = 'hybrid/overlay'
                     break
-            spl = spl + ['coul/long/cs','12.0','thole','2.6','12.0']
-            fr[i] = ' '.join(spl) + '\n'
+            if(dip):
+                spl = spl + ['coul/long/cs','12.0','thole','2.6','12.0',
+                             'coul/tt','4','12.0']
+                fr[i] = ' '.join(spl) + '\n'
+            else:
+                spl = spl + ['coul/long/cs','12.0','thole','2.6','12.0']
+                fr[i] = ' '.join(spl) + '\n'
+
 
 def fix_shake(fr):
     '''

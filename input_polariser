@@ -33,6 +33,38 @@ def mixing(fr,pr,ru):
             fr[i:anchor + 1] = []
             break
 
+def checkhbond(da,pr):
+    '''
+    This function checks the data for any O-H bonds,
+    then adds appropriate pair_coeff lines to the interactions between
+    the hydrogen and all drude core/particle pairs.
+    '''
+    # First check for any O-H bonds
+    hbond, hydrogens = False, []
+    for i in range(len(da)):
+        if 'Atoms' in da[i]:
+            anchor = i + 1
+                while len(da[anchor + 1].split()) > 0 and da[anchor + 1][0] != '#':
+                    anchor = anchor + 1
+                    spl = da[anchor].split()
+    
+    # With a hbond detected, we borrow from the grouping function
+    if(hbond):
+        cores, drudes = [], []
+        for i in range(len(da)):
+            if 'Masses' in da[i]:
+                anchor = i + 1
+                while len(da[anchor + 1].split()) > 0 and da[anchor + 1][0] != '#':
+                    anchor = anchor + 1
+                    spl = da[anchor].split()
+                    if spl[-1] == 'DP':
+                        drudes.append(spl[0])
+                    elif spl[-1] == 'DC':
+                        cores.append(spl[0])
+                maxatom = int(spl[0])
+                break
+
+
 def include(fr):
     '''
     This function adapts the read_data line to support more neighbours
@@ -224,7 +256,7 @@ def main():
     mixing(fromlines,pairlines,rule)
     include(fromlines)
     thermo(fromlines)
-    pair_style(fromlines)
+    pair_style(fromlines,hbond)
     grouping(datalines,fromlines)
     fix_shake(fromlines)
     dump_modify(fromlines) 

@@ -77,7 +77,17 @@ def checkhbond(da,pr):
                         cores.append(spl[0])
                 maxatom = int(spl[0])
                 break
-        
+        pr.append('# Adding Tang-Toennies damping to prone hydrogens \n')
+        for i in range(len(hydrogens)):
+           for j in range(len(cores)):
+               pairline = ['pair_coeff',str(cores[j]),str(hydrogens[i]),
+                           'coul/tt','4.5','1.0']
+               pr.append(' '.join(pairline) + '\n')
+           for j in range(len(drudes)):
+               pairline = ['pair_coeff',str(drudes[j]),str(hydrogens[i]),
+                           'coul/tt','4.5','1.0']
+               pr.append(' '.join(pairline) + '\n')
+        return(True)
     else:
         print('None found')
         return(False)

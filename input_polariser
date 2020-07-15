@@ -40,16 +40,27 @@ def checkhbond(da,pr):
     the hydrogen and all drude core/particle pairs.
     '''
     # First check for any O-H bonds
+    print('Checking for any potential hydrogen bonds..')
     hbond, hydrogens = False, []
     for i in range(len(da)):
-        if 'Atoms' in da[i]:
+        if 'Bond Coeffs' in da[i]:
             anchor = i + 1
                 while len(da[anchor + 1].split()) > 0 and da[anchor + 1][0] != '#':
                     anchor = anchor + 1
-                    spl = da[anchor].split()
+                    bond = da[anchor].split()[-1]
+                    bond = bond.split('-')
+                    atoms = bond.copy()
+                    bond[0] = bond[0][0]
+                    bond[1] = bond[1][0]
+                    for j in range(bond):
+                        if bond[j] = 'H' and bond[j-1] = 'O':
+                            hbond = True
+                            hydrogens.append(atoms[j])
+                break 
     
     # With a hbond detected, we borrow from the grouping function
     if(hbond):
+        print('Potential hydrogen bonds detected')
         cores, drudes = [], []
         for i in range(len(da)):
             if 'Masses' in da[i]:
@@ -57,12 +68,19 @@ def checkhbond(da,pr):
                 while len(da[anchor + 1].split()) > 0 and da[anchor + 1][0] != '#':
                     anchor = anchor + 1
                     spl = da[anchor].split()
+                    for j in range(hydrogens):
+                        if spl[3] == hydrogens[j]:
+                            hydrogens[j] = spl[0]
                     if spl[-1] == 'DP':
                         drudes.append(spl[0])
                     elif spl[-1] == 'DC':
                         cores.append(spl[0])
                 maxatom = int(spl[0])
                 break
+        
+    else:
+        print('None found')
+        return(False)
 
 
 def include(fr):
@@ -254,6 +272,7 @@ def main():
     rule = args.mix
     
     mixing(fromlines,pairlines,rule)
+    hbond = checkhbond(datalines,pairlines)
     include(fromlines)
     thermo(fromlines)
     pair_style(fromlines,hbond)

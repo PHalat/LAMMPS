@@ -56,6 +56,10 @@ def checkhbond(da,pr):
                 for j in range(len(bond)):
                     if bond[j] == 'H' and bond[j-1] == 'O':
                         hbond = True  
+                    #Let's also check for Lithium...for reasons
+                    elif bond[j] == 'Li' and bond[j-1] == 'O':
+                        hbond = True
+
             break 
     
     # With a hbond detected, we borrow from the grouping function
@@ -103,7 +107,7 @@ def include(fr):
     global datafile
     global pairfile
     for i in range(len(fr)):
-        if 'read_data' in fr[i]:
+        if 'read_' in fr[i]:
             fr[i] = 'read_data ' + datafile + ' extra/special/per/atom 3 \n'
             fr[i+1:i+1] = ['include ' + pairfile + ' \n'] 
             break

@@ -1,4 +1,5 @@
 #!/usr/bin/env python
+import re
 import sys
 import argparse
 
@@ -21,10 +22,42 @@ def detectmax(inp):
         if '#' in inp[i] and 'Drude particles' in inp[i]:
             maximum = int(inp[i-1].split()[1]) 
 
+def atom_types(datafile):
+    """
+    Search 'Atoms' section of datafile for atom types,
+    returns a dict of {name : atom indices}
+    """
+    types = {}
+    found = False
+    with open(datafile) as f:
+        for line in f:
+            if 'Atoms' in line:
+                found = True
+                continue
+            if 'Bonds' in line:
+                break
+            if found and len(line.split()) > 1:
+                line = line.strip()
+                if not line.endswith('DP'):
+                    line = line.split()
+                    if line[-1] == 'DC':
+                        name = line[-2]
+                    else:
+                        name = line[-1]
+                    if name not in types:
+                        types[name] = [int(line[2])]
+                    else:
+                        types[name].append(int(line[2]))
+    return {
+        k.replace('+', '').replace('-', ''): 
+        list(set(v)) for k,v in types.items()
+        }
+
 def parse(inp):
     '''
     This function parses the arguments in key.scl,
-    constructing lists of relevant atoms
+    constructing lists of relevant atoms.
+    Atom types are found by searching the 'Atoms' section.
     '''
     if ',' in inp and ':' in inp:
         splut = inp.split(',')
@@ -68,7 +101,7 @@ def pair_finder(lists):
     return(pairlist)
     
 
-def scale(sty,key,fr):
+def scale(sty,key,fr,types):
     '''
     This function brings the above functions together,
     interpreting the key.scl file and scales pair 
@@ -85,9 +118,17 @@ def scale(sty,key,fr):
         
         if check:
             spl = key[j].split()
-            first, second = spl[1], spl[2]
-            factor = float(spl[3])
-            indices = [parse(first),parse(second)]
+            if re.search('^[A-z]', spl[1]):
+                # format of `e ch:ac 0.645`
+                mols = spl[1]
+                factor = float(spl[2])
+                mol1, mol2 = mols.split(':')
+                indices = [types[mol1], types[mol2]]
+            else:
+                # format of `e 1:8 9:15 0.645`
+                first, second = spl[1], spl[2]
+                factor = float(spl[3])
+                indices = [parse(first),parse(second)]
             pairs = pair_finder(indices)
             for k in range(len(fr)):
                 if sty in fr[k]:
@@ -112,6 +153,9 @@ def main():
                         help = 'key with scaling factors (default = key.scl)')
     parser.add_argument('-p', '--pairs', default='pair-drude.lmp',
                         help = 'the file containing all pair interactions (default = pair-drude.lmp)')
+    parser.add_argument('-d', '--datafile', default='pdata.lmp',
+                        help = ('the lammps datafile containing force field coeffs and atomic data '
+                        '(default = pdata.lmp)'))
     parser.add_argument('-s', '--style', default='lj/cut/coul/long',
                         help = 'the style of pair_coeff you want to scale (default=lj/cut/coul/long)')
     args = parser.parse_args()
@@ -119,6 +163,10 @@ def main():
     style = args.style
 
     keyfile = args.key
+    
+    datafile = args.datafile
+
+    types = atom_types(datafile)
 
     with open(keyfile, 'r') as f:
         keylines = f.readlines()
@@ -132,7 +180,7 @@ def main():
     
     backup(inlines)
     detectmax(inlines)
-    scale(style,keylines,inlines)
+    scale(style,keylines,inlines,types)
     
     with open(infile, 'w') as f:
         for i in inlines:

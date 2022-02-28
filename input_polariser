@@ -57,7 +57,7 @@ def checkhbond(da,pr):
                     if bond[j] == 'H' and bond[j-1] == 'O':
                         hbond = True  
                     #Let's also check for Lithium...for reasons
-                    elif bond[j] == 'Li' and bond[j-1] == 'O':
+                    elif bond[j] == 'L' and bond[j-1] == 'O':
                         hbond = True
 
             break 

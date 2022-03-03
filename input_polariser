@@ -56,10 +56,6 @@ def checkhbond(da,pr):
                 for j in range(len(bond)):
                     if bond[j] == 'H' and bond[j-1] == 'O':
                         hbond = True  
-                    #Let's also check for Lithium...for reasons
-                    elif bond[j] == 'L' and bond[j-1] == 'O':
-                        hbond = True
-
             break 
     
     # With a hbond detected, we borrow from the grouping function
@@ -97,6 +93,59 @@ def checkhbond(da,pr):
         print('None found')
         return(False)
 
+
+def checkalkali(da,pr):
+    '''
+    This function checks the data for any Li/Na atoms
+    then adds appropriate pair_coeff lines to the interactions between
+    the hydrogen and all drude core/particle pairs.
+    '''
+    print('Checking for any alkali metals..')
+    alkali = False
+    for i in range(len(da)):
+        if 'Bond Coeffs' in da[i]:
+            anchor = i + 1
+            while len(da[anchor + 1].split()) > 0 and da[anchor + 1][0] != '#':
+                anchor = anchor + 1
+                bond = da[anchor].split()[-2]
+                if bond == 'Li' or bond == 'Na':
+                    alkali = True
+            break
+
+    # With an alkali detected, we borrow from the grouping function
+    if(alkali):
+        print('Alkali metals detected')
+        cores, drudes, alkalis = [], [], []
+        for i in range(len(da)):
+            if 'Masses' in da[i]:
+                anchor = i + 1
+                while len(da[anchor + 1].split()) > 0 and da[anchor + 1][0] != '#':
+                    anchor = anchor + 1
+                    spl = da[anchor].split()
+                    if ('Na' == spl[3] or 'Li' == spl[3]):
+                        alkalis.append(spl[0])
+                    if spl[-1] == 'DP':
+                        drudes.append(spl[0])
+                    elif spl[-1] == 'DC':
+                        cores.append(spl[0])
+                maxatom = int(spl[0])
+                break
+        pr.append('# Adding Tang-Toennies damping to alkali metals \n')
+        for i in range(len(alkalis)):
+           for j in range(len(cores)):
+               pairline = ['pair_coeff',cores[j],alkalis[i],
+                           'coul/tt','4.5','1.0']
+               if int(cores[j]) > int(alkalis[i]):
+                   pairline[1:3] = [alkalis[i],cores[j]]
+               pr.append(' '.join(pairline) + '\n')
+           for j in range(len(drudes)):
+               pairline = ['pair_coeff',alkalis[i],drudes[j],
+                           'coul/tt','4.5','1.0']
+               pr.append(' '.join(pairline) + '\n')
+        return(True)
+    else:
+        print('None found')
+        return(False)
 
 def include(fr):
     '''
@@ -290,9 +339,10 @@ def main():
     
     mixing(fromlines,pairlines,rule)
     hbond = checkhbond(datalines,pairlines)
+    alkali = checkalkali(datalines,pairlines) 
     include(fromlines)
     thermo(fromlines)
-    pair_style(fromlines,hbond)
+    pair_style(fromlines,(hbond or alkali))
     grouping(datalines,fromlines)
     fix_shake(fromlines)
     dump_modify(fromlines) 
